@@ -1,0 +1,6 @@
+# [Ref: 03_00_数据库与存储就绪_设计] 版本锚定，可复现可审计
+# PostgreSQL: 镜像 postgres:15-alpine
+# ClickHouse (可选): clickhouse/clickhouse-server:24.3-alpine
+
+postgres_image=postgres:15-alpine
+clickhouse_image=clickhouse/clickhouse-server:24.3-alpine

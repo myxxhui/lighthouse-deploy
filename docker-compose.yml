@@ -1,0 +1,43 @@
+# [Ref: 03_00_数据库与存储就绪_设计] 方式 A：07_ docker-compose 提供 postgres（及可选 clickhouse）
+# 版本固定：PostgreSQL 15.x；ClickHouse 稳定版（可选）
+# 用途：00_ 形态 1 — 仅启动 DB → 执行 init-db.sh → 验收
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: lighthouse-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-lighthouse}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-lighthouse}
+      POSTGRES_DB: ${POSTGRES_DB:-lighthouse}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-lighthouse} -d ${POSTGRES_DB:-lighthouse}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  # 可选：仅当需要 L3 证据平面时启用
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.3-alpine
+    container_name: lighthouse-clickhouse
+    profiles:
+      - with-clickhouse
+    environment:
+      CLICKHOUSE_DB: default
+    ports:
+      - "${CLICKHOUSE_PORT:-9000}:9000"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "-O", "/dev/null", "http://localhost:8123/ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+
+volumes:
+  postgres_data:
+  clickhouse_data:
