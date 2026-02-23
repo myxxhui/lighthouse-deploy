@@ -79,7 +79,7 @@ podman exec lighthouse-postgres psql -U lighthouse -d lighthouse -t -c "SELECT C
 
 ## 清除验证环境
 
-**无论验证是否完成、是否通过，执行完毕后须清除残留（容器/卷），避免占用端口与资源。**
+**00 步骤完成后必须清理；中途失败也要清理。** 不在 00_ 中为下游保留长期运行的 Postgres。若 01_ 需要数据库，由 01_ 步骤自行启动所需程序。
 
 | 方式 | 命令 |
 |------|------|
