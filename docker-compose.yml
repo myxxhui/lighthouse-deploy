@@ -1,11 +1,17 @@
-# [Ref: 03_00_数据库与存储就绪_设计] 方式 A：07_ docker-compose 提供 postgres（及可选 clickhouse）
-# 版本固定：PostgreSQL 15.x；ClickHouse 稳定版（可选）
-# 用途：00_ 形态 1 — 仅启动 DB → 执行 init-db.sh → 验收
+# [Ref: 03_00_数据库与存储就绪_设计] 方式 A：01_ docker-compose 提供 postgres + backend + frontend 一键拉起
+# [Ref: 04_Phase4/01_成本透视真实数据] backend 启动时自动执行一次云账单 ETL（需配置 AK/SK 时）
+# 首次启动：docker compose up -d postgres && sleep 5 && ./scripts/init-db.sh && docker compose up -d
+# 或先构建镜像：cd lighthouse-src && make docker-all，再在 deploy 目录：docker compose up -d
+# 不设置 container_name，由 compose 自动命名，避免重复 up 时 "container name already in use"。
+# "no such volume" 为首次创建卷时的正常提示，compose 会自动 create。完全重建：docker compose down -v 后 up -d。
+#
+# 故障排除：若出现 "address already in use"（5432/9000/8080/3000），说明端口被占用。
+# 1) 先在本目录执行：docker compose down（停止本项目容器）。
+# 2) 若仍占用，用 podman ps 或 docker ps 查看谁占用端口，stop 对应容器；或在本目录 .env 中修改 POSTGRES_PORT、CLICKHOUSE_PORT、LIGHTHOUSE_PORT、LIGHTHOUSE_FRONTEND_PORT 再 up -d。
 
 services:
   postgres:
     image: postgres:15-alpine
-    container_name: lighthouse-postgres
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-lighthouse}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-lighthouse}
@@ -20,10 +26,54 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
-  # 可选：仅当需要 L3 证据平面时启用
+  backend:
+    image: ${LIGHTHOUSE_BACKEND_IMAGE:-lighthouse-backend:latest}
+    build:
+      context: ${LIGHTHOUSE_SRC_PATH:-../lighthouse-src}
+      dockerfile: docker/Dockerfile.backend
+      args:
+        GIT_COMMIT: ${GIT_COMMIT:-}
+        VERSION: ${VERSION:-0.1.0}
+        BUILD_TIME: ${BUILD_TIME:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: ${POSTGRES_DB:-lighthouse}
+      POSTGRES_USER: ${POSTGRES_USER:-lighthouse}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-lighthouse}
+      ALIBABA_CLOUD_ACCESS_KEY_ID: ${ALIBABA_CLOUD_ACCESS_KEY_ID:-}
+      ALIBABA_CLOUD_ACCESS_KEY_SECRET: ${ALIBABA_CLOUD_ACCESS_KEY_SECRET:-}
+      CLOUD_BILLING_PROVIDER: ${CLOUD_BILLING_PROVIDER:-aliyun}
+      CLOUD_BILLING_ENDPOINT: ${CLOUD_BILLING_ENDPOINT:-}
+    ports:
+      - "${LIGHTHOUSE_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1:8080/health || exit 1"]
+      interval: 10s
+      timeout: 3s
+      start_period: 10s
+      retries: 3
+
+  frontend:
+    image: ${LIGHTHOUSE_FRONTEND_IMAGE:-lighthouse-frontend:latest}
+    build:
+      context: ${LIGHTHOUSE_SRC_PATH:-../lighthouse-src}/web
+      dockerfile: docker/Dockerfile.frontend
+      args:
+        GIT_COMMIT: ${GIT_COMMIT:-}
+        VERSION: ${VERSION:-0.1.0}
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${LIGHTHOUSE_FRONTEND_PORT:-3000}:8080"
+    # nginx 内 /api 已 proxy_pass 到 backend:8080
+
   clickhouse:
     image: clickhouse/clickhouse-server:24.3-alpine
-    container_name: lighthouse-clickhouse
     profiles:
       - with-clickhouse
     environment:

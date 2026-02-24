@@ -16,10 +16,18 @@
 
 ### 1. 启动 Postgres（及可选 ClickHouse）
 
+若未安装 Compose，可安装：**Alibaba Cloud Linux / RHEL 8**：`sudo dnf install -y podman-compose postgresql`（postgresql 提供本机 `psql` 供 init-db.sh 使用）。
+
+- **有 Docker Compose**：`docker compose up -d postgres`
+- **仅有 Podman**：使用 `podman-compose`（与现有 `docker-compose.yml` 兼容）：`podman-compose up -d postgres`
+
 ```bash
 cd lighthouse-deploy
 cp .env.example .env   # 按需修改连接信息
+# 二选一：
 docker compose up -d postgres
+# 或
+podman-compose up -d postgres
 # 可选: docker compose --profile with-clickhouse up -d
 ```
 
@@ -27,6 +35,7 @@ docker compose up -d postgres
 
 ```bash
 docker compose exec postgres pg_isready -U lighthouse -d lighthouse
+# 或 podman-compose exec postgres pg_isready -U lighthouse -d lighthouse
 ```
 
 ### 2. 程序获取数据库连接配置
@@ -54,6 +63,20 @@ cd lighthouse-deploy
 ---
 
 ## 仅 Podman、无 Compose 时（等价 1～4 步）
+
+若 `podman-compose up -d postgres` 报错 **dnsmasq/inotify: No space left on device**（CNI 网络限制），可改用 **host 网络** 直接起 Postgres，再从本机执行 `./scripts/init-db.sh`：
+
+```bash
+cd lighthouse-deploy
+podman rm -f lighthouse-postgres 2>/dev/null
+podman run -d --name lighthouse-postgres \
+  -e POSTGRES_USER=lighthouse -e POSTGRES_PASSWORD=lighthouse -e POSTGRES_DB=lighthouse \
+  -v lighthouse-deploy_postgres_data:/var/lib/postgresql/data \
+  --network host postgres:15-alpine
+# 等待就绪后在本机执行：export POSTGRES_HOST=localhost POSTGRES_PORT=5432 ... && ./scripts/init-db.sh
+```
+
+或使用桥接端口方式（无需 host 网络）：
 
 ```bash
 cd lighthouse-deploy
