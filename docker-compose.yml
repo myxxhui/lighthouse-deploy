@@ -1,13 +1,10 @@
 # [Ref: 03_00_数据库与存储就绪_设计] 方式 A：01_ docker-compose 提供 postgres + backend + frontend 一键拉起
 # [Ref: 04_Phase4/01_成本透视真实数据] backend 启动时自动执行一次云账单 ETL（需配置 AK/SK 时）
-# 首次启动：docker compose up -d postgres && sleep 5 && ./scripts/init-db.sh && docker compose up -d
-# 或先构建镜像：cd lighthouse-src && make docker-all，再在 deploy 目录：docker compose up -d
-# 不设置 container_name，由 compose 自动命名，避免重复 up 时 "container name already in use"。
-# "no such volume" 为首次创建卷时的正常提示，compose 会自动 create。完全重建：docker compose down -v 后 up -d。
+# 一键启动：docker compose up -d。PG 首次创建数据目录时会自动执行 scripts/init-db.sql 建表，无 one-shot 容器、兼容 podman-compose。
+# 若数据卷已存在但未建表：先 docker compose up -d postgres，再 sleep 5 && ./scripts/init-db.sh，再 docker compose up -d。
+# 若曾使用过 init-db 服务：会残留 init-db 容器导致 down 时无法 rm postgres，先 podman rm -f lighthouse-deploy_init-db_1 再 down。
 #
-# 故障排除：若出现 "address already in use"（5432/9000/8080/3000），说明端口被占用。
-# 1) 先在本目录执行：docker compose down（停止本项目容器）。
-# 2) 若仍占用，用 podman ps 或 docker ps 查看谁占用端口，stop 对应容器；或在本目录 .env 中修改 POSTGRES_PORT、CLICKHOUSE_PORT、LIGHTHOUSE_PORT、LIGHTHOUSE_FRONTEND_PORT 再 up -d。
+# 故障排除：若出现 "address already in use"（5432/9000/8080/3000），先 docker compose down；仍占用则改 .env 端口或 stop 占用端口的容器。
 
 services:
   postgres:
@@ -25,6 +22,8 @@ services:
       retries: 5
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      # [Ref: 06_ §2.1] 仅首次创建数据目录时执行，建表含 cost_cloud_bill_*；兼容 podman-compose，无 one-shot 依赖图问题
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
 
   backend:
     image: ${LIGHTHOUSE_BACKEND_IMAGE:-lighthouse-backend:latest}
