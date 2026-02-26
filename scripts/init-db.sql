@@ -85,6 +85,8 @@ CREATE TABLE IF NOT EXISTS cost_env_account_config (
     created_at      TIMESTAMP DEFAULT NOW()
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_env_account ON cost_env_account_config(environment);
+-- [Ref: 01_实践 §按环境总账] 预置 POC 环境，使按环境拉取（ALIBABA_CLOUD_ACCESS_KEY_ID_POC）落库的 account_id=POC 能对应展示；可改为真实 account_id 或新增 FAT/UAT/PROD
+INSERT INTO cost_env_account_config (environment, account_id, display_name, sort_order) VALUES ('POC', 'POC', 'POC 演示账号', 1) ON CONFLICT (environment) DO NOTHING;
 -- [Ref: 01_设计 §产品分类与按环境钻取] 云产品与成本分类映射
 CREATE TABLE IF NOT EXISTS product_category_mapping (
     id              SERIAL PRIMARY KEY,
