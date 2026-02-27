@@ -62,17 +62,18 @@ CREATE TABLE IF NOT EXISTS cost_cloud_bill_daily_raw (
     region          VARCHAR(32),
     PRIMARY KEY (bill_date)
 );
+-- [Ref: 01_设计 §后端数据聚合与存储方案、D9-5] 聚合表主键必须为 (report_type, period_key, account_id)；单账号 account_id 占位 ''
 CREATE TABLE IF NOT EXISTS cost_cloud_bill_aggregate (
     report_type     VARCHAR(16) NOT NULL,
     period_key      VARCHAR(32) NOT NULL,
+    account_id      VARCHAR(64) NOT NULL DEFAULT '',
     total_amount    DECIMAL(12, 2) NOT NULL,
     product_breakdown JSONB,
     last_success_at TIMESTAMP,
     created_at      TIMESTAMP DEFAULT NOW(),
     updated_at      TIMESTAMP DEFAULT NOW(),
-    account_id      VARCHAR(64),
     region          VARCHAR(32),
-    PRIMARY KEY (report_type, period_key)
+    PRIMARY KEY (report_type, period_key, account_id)
 );
 CREATE INDEX IF NOT EXISTS idx_cloud_bill_aggregate_period ON cost_cloud_bill_aggregate(report_type, period_key);
 -- [Ref: 01_设计 §环境与云账号配置] 环境与云账号映射
