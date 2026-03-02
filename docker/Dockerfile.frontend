@@ -11,12 +11,14 @@ RUN --mount=type=cache,target=/root/.npm \
     npm ci --prefer-offline --ignore-scripts
 
 # 阶段 2：构建
+# [Ref: 01_实践] BUILD_TIME 用于破坏缓存：部署时传入不同值可强制重新执行 npm run build，避免 COPY 层被误缓存导致旧前端代码仍被打进镜像
 FROM deps AS builder
 WORKDIR /app
 ARG GIT_COMMIT
 ARG VERSION
+ARG BUILD_TIME=
 COPY . .
-RUN npm run build
+RUN echo "Build time: $BUILD_TIME" && npm run build
 # 构建时写入 /build-info 静态内容
 RUN echo "{\"version\":\"${VERSION}\",\"gitCommit\":\"${GIT_COMMIT}\"}" > dist/build-info.json
 

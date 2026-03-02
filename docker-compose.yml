@@ -68,11 +68,14 @@ services:
   frontend:
     image: ${LIGHTHOUSE_FRONTEND_IMAGE:-lighthouse-frontend:latest}
     build:
+      # 构建上下文必须指向含最新前端源码的目录；默认 ../lighthouse-src/web（相对本 compose 文件所在目录）。若目录结构不同，请在 .env 中设置 LIGHTHOUSE_SRC_PATH 为绝对路径（如 /path/to/lighthouse-src）。
       context: ${LIGHTHOUSE_SRC_PATH:-../lighthouse-src}/web
       dockerfile: docker/Dockerfile.frontend
       args:
         GIT_COMMIT: ${GIT_COMMIT:-}
         VERSION: ${VERSION:-0.1.0}
+        # 部署时设置 BUILD_TIME 可强制跳过构建缓存，确保最新代码打进镜像（如 scripts/rebuild-frontend.sh 中 export BUILD_TIME=$(date +%s)）
+        BUILD_TIME: ${BUILD_TIME:-}
     depends_on:
       backend:
         condition: service_healthy
