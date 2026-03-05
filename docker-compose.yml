@@ -5,6 +5,7 @@
 # 若曾使用过 init-db 服务：会残留 init-db 容器导致 down 时无法 rm postgres，先 podman rm -f lighthouse-deploy_init-db_1 再 down。
 #
 # 故障排除：若出现 "address already in use"（5432/9000/8080/3000），先 docker compose down；仍占用则改 .env 端口或 stop 占用端口的容器。
+# down 时若未启用 with-clickhouse 会报 "no container ... clickhouse_1 found"，可忽略；其他服务会正常停止并删除。
 
 services:
   postgres:

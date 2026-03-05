@@ -6,7 +6,7 @@ SELECT COUNT(*) AS daily_raw_count,
        MIN(bill_date)::text AS min_date,
        MAX(bill_date)::text AS max_date
   FROM cost_cloud_bill_daily_raw;
-SELECT bill_date, total_amount, account_id, snapshot_at
+SELECT bill_date, total_amount, cash_total_amount, account_id, snapshot_at
   FROM cost_cloud_bill_daily_raw
   ORDER BY bill_date DESC
   LIMIT 30;
