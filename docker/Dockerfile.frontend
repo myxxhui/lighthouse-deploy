@@ -29,8 +29,11 @@ ARG VERSION=0.1.0
 COPY --from=builder /app/dist /usr/share/nginx/html
 # build-info 已在 builder 写入 dist/build-info.json 并随 COPY 带入；此处可覆盖
 RUN echo "{\"version\":\"${VERSION}\",\"gitCommit\":\"${GIT_COMMIT}\"}" > /usr/share/nginx/html/build-info.json
-# 默认配置：SPA try_files + 安全头 + /build-info；/api 由 compose 通过 envsubst 或下方 default 代理到 backend
+# 默认配置：SPA try_files + 安全头 + /build-info；/api 代理到 backend；resolver 由 entrypoint 从 resolv.conf 注入以兼容 Podman/Docker
 RUN chown -R nginx:nginx /usr/share/nginx/html
 EXPOSE 8080
-# 使用自定义配置监听 8080 并加入安全头与 try_files（构建上下文为 lighthouse-src/web，需将 docker/ 置于 web 下）
+# 使用自定义配置监听 8080；entrypoint 启动时注入 resolver，避免 [emerg] host not found in upstream "backend"
 COPY docker/nginx-frontend.conf /etc/nginx/conf.d/default.conf
+COPY docker/docker-entrypoint-nginx.sh /docker-entrypoint-nginx.sh
+RUN chmod +x /docker-entrypoint-nginx.sh
+ENTRYPOINT ["/docker-entrypoint-nginx.sh"]

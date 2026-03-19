@@ -57,6 +57,8 @@ services:
       ALIBABA_CLOUD_ACCESS_KEY_SECRET_PROD: ${ALIBABA_CLOUD_ACCESS_KEY_SECRET_PROD:-}
       CLOUD_BILLING_PROVIDER: ${CLOUD_BILLING_PROVIDER:-aliyun}
       CLOUD_BILLING_ENDPOINT: ${CLOUD_BILLING_ENDPOINT:-}
+      # UAT 中国站等按环境单独 endpoint [Ref: 01_实践 多环境 endpoint]
+      CLOUD_BILLING_ENDPOINT_UAT: ${CLOUD_BILLING_ENDPOINT_UAT:-}
     ports:
       - "${LIGHTHOUSE_PORT:-8080}:8080"
     healthcheck:
@@ -69,9 +71,9 @@ services:
   frontend:
     image: ${LIGHTHOUSE_FRONTEND_IMAGE:-lighthouse-frontend:latest}
     build:
-      # 构建上下文必须指向含最新前端源码的目录；默认 ../lighthouse-src/web（相对本 compose 文件所在目录）。若目录结构不同，请在 .env 中设置 LIGHTHOUSE_SRC_PATH 为绝对路径（如 /path/to/lighthouse-src）。
+      # 构建上下文指向前端源码目录；Dockerfile 唯一来源为 deploy 目录（与 context 解耦）。默认假设 lighthouse-src 与 lighthouse-deploy 同属一父目录；否则在 .env 中设置 LIGHTHOUSE_DEPLOY_ABSOLUTE 为 lighthouse-deploy 的绝对路径。
       context: ${LIGHTHOUSE_SRC_PATH:-../lighthouse-src}/web
-      dockerfile: docker/Dockerfile.frontend
+      dockerfile: ${LIGHTHOUSE_DEPLOY_ABSOLUTE:-../../lighthouse-deploy}/docker/Dockerfile.frontend
       args:
         GIT_COMMIT: ${GIT_COMMIT:-}
         VERSION: ${VERSION:-0.1.0}

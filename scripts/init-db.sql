@@ -88,6 +88,7 @@ CREATE TABLE IF NOT EXISTS cost_cloud_bill_month_status (
 -- [Ref: 06_ 成本云账单三表] 月原始表：dual-metric v3（含 CashAmount 字段）
 -- total_amount / product_breakdown        = PretaxAmount（资源消耗价值）
 -- cash_total_amount / cash_product_breakdown = CashAmount（资源支付价值）
+-- [Ref: 01_多环境 UAT] 月表主键 (billing_cycle, account_id)，多环境各写一行、互不覆盖；列顺序与迁移兼容
 CREATE TABLE IF NOT EXISTS cost_cloud_bill_monthly_raw (
     billing_cycle           VARCHAR(32) NOT NULL,
     total_amount            DECIMAL(12, 6) NOT NULL,
@@ -96,11 +97,11 @@ CREATE TABLE IF NOT EXISTS cost_cloud_bill_monthly_raw (
     cash_product_breakdown  JSONB NOT NULL DEFAULT '{}',
     snapshot_at             TIMESTAMP DEFAULT NOW(),
     created_at              TIMESTAMP DEFAULT NOW(),
-    account_id              VARCHAR(64),
+    account_id              VARCHAR(64) NOT NULL DEFAULT '',
     region                  VARCHAR(32),
-    PRIMARY KEY (billing_cycle)
+    PRIMARY KEY (billing_cycle, account_id)
 );
--- 日原始表：dual-metric v3
+-- 日原始表：主键 (bill_date, account_id)，多环境各写一行
 CREATE TABLE IF NOT EXISTS cost_cloud_bill_daily_raw (
     bill_date               DATE NOT NULL,
     total_amount            DECIMAL(12, 6) NOT NULL,
@@ -109,9 +110,9 @@ CREATE TABLE IF NOT EXISTS cost_cloud_bill_daily_raw (
     cash_product_breakdown  JSONB NOT NULL DEFAULT '{}',
     snapshot_at             TIMESTAMP DEFAULT NOW(),
     created_at              TIMESTAMP DEFAULT NOW(),
-    account_id              VARCHAR(64),
+    account_id              VARCHAR(64) NOT NULL DEFAULT '',
     region                  VARCHAR(32),
-    PRIMARY KEY (bill_date)
+    PRIMARY KEY (bill_date, account_id)
 );
 -- [Ref: 01_设计 §后端数据聚合与存储方案、D9-5] 聚合表 PK = (report_type, period_key, account_id, metric_type)
 -- metric_type: 'consumption'（资源消耗价值，PretaxAmount）| 'payment'（资源支付价值，CashAmount）
@@ -140,8 +141,9 @@ CREATE TABLE IF NOT EXISTS cost_env_account_config (
     created_at      TIMESTAMP DEFAULT NOW()
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_env_account ON cost_env_account_config(environment);
--- [Ref: 01_实践 §按环境总账] 预置 POC 环境，使按环境拉取（ALIBABA_CLOUD_ACCESS_KEY_ID_POC）落库的 account_id=POC 能对应展示；可改为真实 account_id 或新增 FAT/UAT/PROD
+-- [Ref: 01_实践 §按环境总账、01_多环境 UAT] 预置 POC/UAT 环境；已有库未含 UAT 时执行 scripts/migrate-uat-env.sql 一次
 INSERT INTO cost_env_account_config (environment, account_id, display_name, sort_order) VALUES ('POC', 'POC', 'POC 演示账号', 1) ON CONFLICT (environment) DO NOTHING;
+INSERT INTO cost_env_account_config (environment, account_id, display_name, sort_order) VALUES ('UAT', 'UAT', 'UAT 中国站', 2) ON CONFLICT (environment) DO NOTHING;
 -- [Ref: 01_设计 §产品分类与按环境钻取] 云产品与成本分类映射
 CREATE TABLE IF NOT EXISTS product_category_mapping (
     id              SERIAL PRIMARY KEY,
