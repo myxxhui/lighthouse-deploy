@@ -1,0 +1,16 @@
+{{- if and .Values.frontend.enabled .Values.frontend.pdb.enabled (ge (int .Values.frontend.replicaCount) 2) }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "lighthouse-stack.fullname" . }}-frontend
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "lighthouse-stack.labels" . | nindent 4 }}
+    app.kubernetes.io/component: frontend
+spec:
+  minAvailable: {{ .Values.frontend.pdb.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "lighthouse-stack.matchLabels" . | nindent 6 }}
+      app.kubernetes.io/component: frontend
+{{- end }}

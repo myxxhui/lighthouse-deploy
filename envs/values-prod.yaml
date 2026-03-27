@@ -1,0 +1,71 @@
+# [Ref: 03_Phase4/08_一键部署工作流_设计] 生产集群示例：多副本、Ingress+TLS、Bitnami 凭据走 existingSecret（须事先 kubectl create secret）
+# 勿将真实 Secret 名以外的敏感值写入 Git；可与 External Secrets / Sealed Secrets 集成
+
+global:
+  lighthouseNamespace: lighthouse
+  # imagePullSecrets:
+  #   - name: regcred
+
+lighthouse:
+  initSql:
+    enabled: true
+
+postgresql:
+  enabled: true
+  auth:
+    username: lighthouse
+    database: lighthouse
+    # 生产：使用集群内已存在的 Secret（含 postgres-password、password 等 Bitnami 约定键）
+    existingSecret: lighthouse-postgresql-auth
+    postgresPassword: ""
+    password: ""
+  primary:
+    persistence:
+      size: 50Gi
+    resources:
+      requests:
+        cpu: 1000m
+        memory: 2Gi
+      limits:
+        cpu: "4"
+        memory: 8Gi
+    initdb:
+      scriptsConfigMap: ""
+  metrics:
+    enabled: true
+  pdb:
+    create: true
+
+redis:
+  enabled: true
+  auth:
+    existingSecret: lighthouse-redis-auth
+    password: ""
+
+backend:
+  replicaCount: 3
+  envFromSecrets:
+    - name: lighthouse-cloud-credentials
+      optional: true
+
+frontend:
+  replicaCount: 2
+
+ingress:
+  enabled: true
+  className: nginx
+  host: lighthouse.prod.example.com
+  tls: true
+  tlsSecretName: lighthouse-tls
+
+# --- ClickHouse（可选；Bitnami 子 Chart；L3 证据平面）---
+# 启用时建议 auth.existingSecret + admin-password 键（或设 existingSecretKey）；与 Sealed Secrets SOP 对齐
+# clickhouse:
+#   enabled: true
+#   auth:
+#     existingSecret: lighthouse-clickhouse-auth
+#     password: ""
+#     existingSecretKey: admin-password
+
+opencost:
+  enabled: true

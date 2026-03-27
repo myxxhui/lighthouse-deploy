@@ -1,0 +1,57 @@
+# [Ref: 03_Phase4/08_一键部署工作流_设计] 开发/本地集群：单副本、关闭 Ingress/TLS、较小资源；deploy.sh 仍会设置 postgresql.primary.initdb.scriptsConfigMap
+
+global:
+  lighthouseNamespace: lighthouse
+
+lighthouse:
+  initSql:
+    enabled: true
+
+postgresql:
+  enabled: true
+  auth:
+    username: lighthouse
+    database: lighthouse
+    password: lighthouse
+    postgresPassword: lighthouse
+    existingSecret: ""
+  primary:
+    persistence:
+      size: 10Gi
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: "1"
+        memory: 1Gi
+    initdb:
+      scriptsConfigMap: ""
+  pdb:
+    create: false
+
+redis:
+  enabled: false
+
+backend:
+  replicaCount: 1
+  pdb:
+    enabled: false
+
+frontend:
+  replicaCount: 1
+  service:
+    type: NodePort
+    port: 3000
+    nodePort: 30080
+  pdb:
+    enabled: false
+
+ingress:
+  enabled: false
+
+clickhouse:
+  enabled: false
+
+opencost:
+  enabled: false

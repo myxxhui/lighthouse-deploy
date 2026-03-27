@@ -1,0 +1,25 @@
+# [Ref: 03_Phase4/08_一键部署工作流_设计] [Ref: 06_存储架构与ETL规范 §1.1] 生产级：Bitnami PostgreSQL/Redis/ClickHouse + Lighthouse + 可选 OpenCost
+apiVersion: v2
+name: lighthouse-stack
+description: Lighthouse 生产级 Umbrella（Bitnami PostgreSQL/Redis/ClickHouse 子 Chart；backend/frontend；可选 OpenCost）
+type: application
+version: 0.3.1
+appVersion: "0.3.1"
+
+dependencies:
+  - name: postgresql
+    version: "18.5.14"
+    repository: "https://charts.bitnami.com/bitnami"
+    condition: postgresql.enabled
+  - name: redis
+    version: "25.3.9"
+    repository: "https://charts.bitnami.com/bitnami"
+    condition: redis.enabled
+  - name: clickhouse
+    version: "9.4.4"
+    repository: "https://charts.bitnami.com/bitnami"
+    condition: clickhouse.enabled
+  - name: opencost
+    version: "2.5.12"
+    repository: "https://opencost.github.io/opencost-helm-chart"
+    condition: opencost.enabled

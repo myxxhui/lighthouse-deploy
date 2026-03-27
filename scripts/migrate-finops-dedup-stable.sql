@@ -1,0 +1,4 @@
+-- [Ref: 04_采集 §5.6] finops_billing_fact 行级 dedup_key 算法升级后，旧行键与新键不兼容时可能并存重复逻辑行。
+-- 若曾写入 OSS OLAP 数据，上线本迁移后建议择一执行（按环境评估）：
+--   TRUNCATE finops_billing_fact;
+-- 然后等待下一次 ETL 从 OSS 重灌，或重新触发 OSS 同步。

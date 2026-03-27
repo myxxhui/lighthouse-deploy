@@ -38,6 +38,10 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    # 将 .env 中全部键注入容器；未在下方 environment 列出的变量（如 FINOPS_CG_SOURCE_<与表 environment 一致>、任意 ALIBABA_*_<ENV>）方可生效。
+    # 同名键以 environment 为准（如 POSTGRES_HOST 必须为服务名 postgres，覆盖宿主机 .env 的 localhost）。
+    env_file:
+      - .env
     environment:
       POSTGRES_HOST: postgres
       POSTGRES_PORT: "5432"
@@ -57,8 +61,22 @@ services:
       ALIBABA_CLOUD_ACCESS_KEY_SECRET_PROD: ${ALIBABA_CLOUD_ACCESS_KEY_SECRET_PROD:-}
       CLOUD_BILLING_PROVIDER: ${CLOUD_BILLING_PROVIDER:-aliyun}
       CLOUD_BILLING_ENDPOINT: ${CLOUD_BILLING_ENDPOINT:-}
+      # [Ref: 01_实践 月源数据保留近5年] 去年/自定义月范围依赖月表；显式拉取 60 个月保证历史数据
+      BILLING_MONTHLY_PULL_MONTHS: ${BILLING_MONTHLY_PULL_MONTHS:-60}
+      BILLING_MONTHLY_RETENTION_MONTHS: ${BILLING_MONTHLY_RETENTION_MONTHS:-60}
       # UAT 中国站等按环境单独 endpoint [Ref: 01_实践 多环境 endpoint]
       CLOUD_BILLING_ENDPOINT_UAT: ${CLOUD_BILLING_ENDPOINT_UAT:-}
+      # [Ref: Phase6 OLAP] 新加坡 OSS 账单订阅（UAT 凭证读 bucket）
+      OSS_BILLING_BUCKET: ${OSS_BILLING_BUCKET:-}
+      OSS_BILLING_PREFIX: ${OSS_BILLING_PREFIX:-billing-data/}
+      OSS_ENDPOINT: ${OSS_ENDPOINT:-https://oss-ap-southeast-1.aliyuncs.com}
+      OSS_SYNC_MODE: ${OSS_SYNC_MODE:-all}
+      # 五维 C/G：默认 FINOPS_CG_SOURCE；按环境 FINOPS_CG_SOURCE_POC 等覆盖（POC 仅 API、UAT 走 OSS 等）[Ref: 03_Phase6/01_FinOps]
+      FINOPS_CG_SOURCE: ${FINOPS_CG_SOURCE:-oss}
+      FINOPS_CG_SOURCE_POC: ${FINOPS_CG_SOURCE_POC:-}
+      FINOPS_CG_SOURCE_FAT: ${FINOPS_CG_SOURCE_FAT:-}
+      FINOPS_CG_SOURCE_UAT: ${FINOPS_CG_SOURCE_UAT:-}
+      FINOPS_CG_SOURCE_PROD: ${FINOPS_CG_SOURCE_PROD:-}
     ports:
       - "${LIGHTHOUSE_PORT:-8080}:8080"
     healthcheck:

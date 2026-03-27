@@ -1,0 +1,16 @@
+{{- if and .Values.postgresql.enabled .Values.lighthouse.initSql.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "lighthouse-stack.initSqlConfigMapName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "lighthouse-stack.labels" . | nindent 4 }}
+    app.kubernetes.io/component: init-sql
+  annotations:
+    meta.helm.sh/release-name: {{ .Release.Name }}
+    meta.helm.sh/release-namespace: {{ .Release.Namespace }}
+data:
+  init-db.sql: |
+{{ .Files.Get "files/init-db.sql" | nindent 4 }}
+{{- end }}

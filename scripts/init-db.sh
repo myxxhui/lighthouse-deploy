@@ -1,10 +1,20 @@
 #!/usr/bin/env bash
-# [Ref: 03_00_数据库与存储就绪_设计] [Ref: 06_存储架构与ETL规范 §2.1/§2.2]
-# init-db.sh — 初始化 L2 控制平面 (PostgreSQL) 与可选 L3 证据平面 (ClickHouse)
-# 表清单与 DDL 唯一来源: 06_ §2.1 (PostgreSQL)、§2.2 (ClickHouse)
-# 脚本归属: 08_ 产出，路径 lighthouse-deploy/scripts/init-db.sh
+# [Ref: 03_Phase4/08_一键部署工作流_设计] [Ref: 03_00_数据库与存储就绪_设计] [Ref: 06_存储架构与ETL规范 §2.1/§2.2]
+# init-db.sh — 对 L2 控制平面 (PostgreSQL) 执行**唯一权威** DDL：scripts/init-db.sql；可选 L3 证据平面 (ClickHouse)
+# DDL 唯一来源: scripts/init-db.sql（与 docker-compose postgres init、Helm ConfigMap 同步源一致；见 scripts/sync-chart-init-sql.sh）
+# 增量 ALTER 历史脚本见 scripts/migrate-*.sql（已有库升级用，绿场安装以 init-db.sql 为准）
 
-set -e
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DEPLOY_ROOT="$(dirname "$SCRIPT_DIR")"
+
+if [ -f "$DEPLOY_ROOT/.env" ]; then
+  set -a
+  # shellcheck source=/dev/null
+  source "$DEPLOY_ROOT/.env"
+  set +a
+fi
 
 POSTGRES_HOST="${POSTGRES_HOST:-localhost}"
 POSTGRES_PORT="${POSTGRES_PORT:-5432}"
@@ -14,99 +24,24 @@ POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-lighthouse}"
 
 export PGPASSWORD="$POSTGRES_PASSWORD"
 
-# --- PostgreSQL: 06_ §2.1 控制平面表 ---
-psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 <<'EOSQL'
--- Cost domain (06_ §2.1)
-CREATE TABLE IF NOT EXISTS cost_daily_namespace (
-    day             DATE NOT NULL,
-    namespace       VARCHAR(64) NOT NULL,
-    billable_cost   DECIMAL(10, 2),
-    usage_cost      DECIMAL(10, 2),
-    waste_cost      DECIMAL(10, 2),
-    efficiency      DECIMAL(5, 2),
-    pod_count       INT,
-    zombie_count    INT,
-    PRIMARY KEY (day, namespace)
-);
+INIT_SQL="${INIT_SQL:-$SCRIPT_DIR/init-db.sql}"
+if [ ! -f "$INIT_SQL" ]; then
+  echo "[init-db] ERROR: missing $INIT_SQL" >&2
+  exit 1
+fi
 
-CREATE TABLE IF NOT EXISTS cost_hourly_workload (
-    time_bucket     TIMESTAMP NOT NULL,
-    namespace       VARCHAR(64),
-    workload_name   VARCHAR(128),
-    workload_kind   VARCHAR(32),
-    request_cores   DECIMAL(10, 4),
-    limit_cores     DECIMAL(10, 4),
-    max_cpu_usage   DECIMAL(10, 4),
-    p95_cpu_usage   DECIMAL(10, 4),
-    avg_cpu_usage   DECIMAL(10, 4),
-    PRIMARY KEY (time_bucket, namespace, workload_name)
-);
+echo "[init-db] Applying DDL from $INIT_SQL ..."
+psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -f "$INIT_SQL"
 
-CREATE TABLE IF NOT EXISTS cost_roi_events (
-    id              SERIAL PRIMARY KEY,
-    event_time      TIMESTAMP DEFAULT NOW(),
-    namespace       VARCHAR(64),
-    service_name    VARCHAR(128),
-    event_type      VARCHAR(32),
-    savings_amount  DECIMAL(10, 2),
-    description     TEXT
-);
+# 可选种子数据（与 init-db.sql 幂等 INSERT 互补；不存在则跳过）
+for f in "$SCRIPT_DIR/seed-env-config.sql" "$SCRIPT_DIR/seed-product-category-mapping.sql"; do
+  if [ -f "$f" ]; then
+    echo "[init-db] Applying seed $(basename "$f") ..."
+    psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -f "$f"
+  fi
+done
 
-CREATE TABLE IF NOT EXISTS cost_cloud_bill_summary (
-    day             DATE NOT NULL,
-    billing_cycle   VARCHAR(32),
-    total_amount    DECIMAL(12, 2) NOT NULL,
-    product_breakdown JSONB,
-    created_at     TIMESTAMP DEFAULT NOW(),
-    updated_at     TIMESTAMP DEFAULT NOW(),
-    PRIMARY KEY (day, billing_cycle)
-);
-
--- SLO domain (06_ §2.1)
-CREATE TABLE IF NOT EXISTS slo_definitions (
-    id              SERIAL PRIMARY KEY,
-    namespace       VARCHAR(64),
-    service_name    VARCHAR(128),
-    target_slo      DECIMAL(5, 4),
-    time_window     VARCHAR(10),
-    error_budget_policy VARCHAR(32)
-);
-
-CREATE TABLE IF NOT EXISTS slo_daily_history (
-    day             DATE NOT NULL,
-    slo_id          INT REFERENCES slo_definitions(id),
-    availability    DECIMAL(7, 6),
-    error_budget_remaining DECIMAL(5, 2),
-    status          VARCHAR(16),
-    PRIMARY KEY (day, slo_id)
-);
-
--- RCA domain (06_ §2.1)
-CREATE TABLE IF NOT EXISTS rca_incidents (
-    id              SERIAL PRIMARY KEY,
-    incident_time   TIMESTAMP NOT NULL,
-    service_name    VARCHAR(128),
-    snapshot_data   JSONB,
-    root_cause_type VARCHAR(32),
-    ai_summary      TEXT,
-    status          VARCHAR(16)
-);
-
--- Prevention domain (06_ §2.1)
-CREATE TABLE IF NOT EXISTS prevention_risks (
-    id              SERIAL PRIMARY KEY,
-    detected_at     TIMESTAMP DEFAULT NOW(),
-    namespace       VARCHAR(64),
-    target          VARCHAR(128),
-    risk_type       VARCHAR(32),
-    severity        VARCHAR(16),
-    description     TEXT,
-    evidence_metrics JSONB,
-    status          VARCHAR(16)
-);
-EOSQL
-
-echo "[init-db] PostgreSQL control-plane tables (06_ §2.1) OK."
+echo "[init-db] PostgreSQL control-plane DDL OK."
 
 # --- ClickHouse (optional): 06_ §2.2 证据平面表 ---
 if [ -n "${CLICKHOUSE_HOST:-}" ]; then

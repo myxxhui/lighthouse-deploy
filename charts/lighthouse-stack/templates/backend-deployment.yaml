@@ -1,0 +1,144 @@
+{{- if .Values.backend.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "lighthouse-stack.fullname" . }}-backend
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "lighthouse-stack.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backend
+spec:
+  replicas: {{ .Values.backend.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "lighthouse-stack.matchLabels" . | nindent 6 }}
+      app.kubernetes.io/component: backend
+  template:
+    metadata:
+      labels:
+        {{- include "lighthouse-stack.labels" . | nindent 8 }}
+        app.kubernetes.io/component: backend
+    spec:
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.backend.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if or .Values.postgresql.enabled .Values.redis.enabled .Values.clickhouse.enabled }}
+      initContainers:
+        {{- if .Values.postgresql.enabled }}
+        - name: wait-for-postgresql
+          image: {{ .Values.lighthouse.waitImage | quote }}
+          command:
+            - sh
+            - -c
+            - until nc -z {{ include "lighthouse-stack.postgresqlServiceName" . }} 5432; do echo waiting for postgresql; sleep 2; done
+        {{- end }}
+        {{- if .Values.redis.enabled }}
+        - name: wait-for-redis
+          image: {{ .Values.lighthouse.waitImage | quote }}
+          command:
+            - sh
+            - -c
+            - until nc -z {{ include "lighthouse-stack.redisMasterServiceName" . }} 6379; do echo waiting for redis; sleep 2; done
+        {{- end }}
+        {{- if .Values.clickhouse.enabled }}
+        - name: wait-for-clickhouse
+          image: {{ .Values.lighthouse.waitImage | quote }}
+          command:
+            - sh
+            - -c
+            - until nc -z {{ include "lighthouse-stack.clickhouseServiceName" . }} {{ .Values.clickhouse.service.ports.http | default 8123 }}; do echo waiting for clickhouse; sleep 2; done
+        {{- end }}
+      {{- end }}
+      containers:
+        - name: backend
+          image: {{ .Values.backend.image | quote }}
+          imagePullPolicy: {{ .Values.backend.pullPolicy }}
+          {{- with .Values.backend.containerSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.backend.port }}
+          env:
+            {{- if .Values.postgresql.enabled }}
+            - name: POSTGRES_HOST
+              value: {{ include "lighthouse-stack.postgresqlServiceName" . }}
+            - name: POSTGRES_PORT
+              value: "5432"
+            - name: POSTGRES_USER
+              value: {{ .Values.postgresql.auth.username | quote }}
+            - name: POSTGRES_DB
+              value: {{ .Values.postgresql.auth.database | quote }}
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "lighthouse-stack.postgresqlSecretName" . }}
+                  key: {{ include "lighthouse-stack.postgresqlUserPasswordKey" . }}
+            {{- end }}
+            {{- if .Values.redis.enabled }}
+            - name: REDIS_HOST
+              value: {{ include "lighthouse-stack.redisMasterServiceName" . }}
+            - name: REDIS_PORT
+              value: "6379"
+            {{- if .Values.redis.auth.enabled }}
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "lighthouse-stack.redisSecretName" . }}
+                  key: {{ .Values.redis.auth.existingSecretPasswordKey | default "redis-password" }}
+            {{- end }}
+            {{- end }}
+            {{- if .Values.clickhouse.enabled }}
+            - name: CH_HOST
+              value: {{ include "lighthouse-stack.clickhouseServiceName" . }}
+            - name: CH_PORT
+              value: {{ .Values.clickhouse.containerPorts.tcp | default 9000 | quote }}
+            - name: CH_USER
+              value: {{ .Values.clickhouse.auth.username | quote }}
+            - name: CH_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "lighthouse-stack.clickhouseSecretName" . }}
+                  key: {{ include "lighthouse-stack.clickhousePasswordKey" . }}
+            - name: CH_DATABASE
+              value: {{ .Values.lighthouse.clickhouseDatabase | default "default" | quote }}
+            {{- end }}
+            {{- if .Values.prometheus.address }}
+            - name: PROMETHEUS_ADDRESS
+              value: {{ .Values.prometheus.address | quote }}
+            {{- end }}
+            {{- range $k, $v := .Values.backend.env }}
+            - name: {{ $k }}
+              value: {{ $v | quote }}
+            {{- end }}
+          {{- if .Values.backend.envFromSecrets }}
+          envFrom:
+            {{- range .Values.backend.envFromSecrets }}
+            - secretRef:
+                name: {{ .name }}
+                optional: {{ default false .optional }}
+            {{- end }}
+          {{- end }}
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          {{- with .Values.backend.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+{{- end }}

@@ -1,0 +1,200 @@
+# [Ref: 03_Phase4/08_一键部署工作流_设计] [Ref: 06_存储架构与ETL规范 §1.1] 生产级默认值：Bitnami PostgreSQL/Redis；L1 时序为 Prometheus TSDB（本 Chart 不内嵌 InfluxDB）；密钥须用 Secret（existingSecret），勿将生产密码提交 Git
+# install 时 deploy.sh 会设置 postgresql.primary.initdb.scriptsConfigMap=<Release名>-init-sql，与 ConfigMap 名称一致
+
+nameOverride: ""
+fullnameOverride: ""
+
+global:
+  lighthouseNamespace: lighthouse
+  imagePullSecrets: []
+
+# --- Lighthouse 父 Chart 专用（非子 Chart）---
+lighthouse:
+  initSql:
+    enabled: true
+  waitImage: busybox:1.36
+  networkPolicy:
+    enabled: false
+  # backend CH_DATABASE；与 Bitnami ClickHouse 逻辑库一致（默认库名 default）
+  clickhouseDatabase: default
+
+# --- Bitnami PostgreSQL（子 Chart；生产须 auth.existingSecret 或 CI 注入密码，勿在仓库明文）---
+# 文档：https://github.com/bitnami/charts/tree/main/bitnami/postgresql
+postgresql:
+  enabled: true
+  architecture: standalone
+  auth:
+    enablePostgresUser: true
+    postgresPassword: ""
+    username: lighthouse
+    password: ""
+    database: lighthouse
+    existingSecret: ""
+    secretKeys:
+      adminPasswordKey: postgres-password
+      userPasswordKey: password
+      replicationPasswordKey: replication-password
+      metricsPasswordKey: metrics-password
+  primary:
+    persistence:
+      enabled: true
+      size: 100Gi
+    resources:
+      requests:
+        cpu: 500m
+        memory: 1Gi
+      limits:
+        cpu: "2"
+        memory: 4Gi
+    initdb:
+      # 由 scripts/deploy.sh --set-string 设为与 ConfigMap 同名：<Release名>-init-sql
+      scriptsConfigMap: ""
+  metrics:
+    enabled: true
+  pdb:
+    create: true
+
+# --- Bitnami Redis（子 Chart；按需启用；应用侧使用 REDIS_* 环境变量）---
+# 文档：https://github.com/bitnami/charts/tree/main/bitnami/redis
+redis:
+  enabled: false
+  architecture: standalone
+  auth:
+    enabled: true
+    password: ""
+    existingSecret: ""
+    existingSecretPasswordKey: "redis-password"
+  master:
+    persistence:
+      enabled: true
+      size: 8Gi
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        cpu: "1"
+        memory: 2Gi
+  pdb:
+    create: true
+
+# --- Backend ---
+backend:
+  enabled: true
+  replicaCount: 2
+  image: lighthouse-backend:latest
+  pullPolicy: IfNotPresent
+  port: 8080
+  service:
+    type: ClusterIP
+  env: {}
+  envFromSecrets: []
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 65532
+    fsGroup: 65532
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: false
+    capabilities:
+      drop: ["ALL"]
+  pdb:
+    enabled: true
+    minAvailable: 1
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: "2"
+      memory: 2Gi
+
+# --- Frontend ---
+frontend:
+  enabled: true
+  replicaCount: 2
+  image: lighthouse-frontend:latest
+  pullPolicy: IfNotPresent
+  containerPort: 8080
+  service:
+    type: ClusterIP
+    port: 80
+  podSecurityContext:
+    runAsUser: 101
+    runAsGroup: 101
+    fsGroup: 101
+  pdb:
+    enabled: true
+    minAvailable: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: "1"
+      memory: 512Mi
+
+# --- Bitnami ClickHouse（子 Chart；L3 证据平面）[Ref: 06_存储架构与ETL规范 §1.1] ---
+# 文档：https://github.com/bitnami/charts/tree/main/bitnami/clickhouse
+# 单机开发/中小规模：shards=1、replicaCount=1、keeper.enabled=false
+clickhouse:
+  enabled: false
+  shards: 1
+  replicaCount: 1
+  keeper:
+    enabled: false
+  auth:
+    username: default
+    password: ""
+    existingSecret: ""
+    existingSecretKey: admin-password
+  tls:
+    enabled: false
+  service:
+    type: ClusterIP
+    ports:
+      http: 8123
+      tcp: 9000
+  containerPorts:
+    http: 8123
+    tcp: 9000
+  persistence:
+    enabled: true
+    size: 50Gi
+    accessModes:
+      - ReadWriteOnce
+  resources:
+    requests:
+      cpu: 1000m
+      memory: 2Gi
+    limits:
+      cpu: "4"
+      memory: 8Gi
+  pdb:
+    create: true
+
+# --- Prometheus 地址（集群内或托管监控）---
+prometheus:
+  address: ""
+
+# --- Ingress（生产推荐开启 TLS）---
+ingress:
+  enabled: true
+  className: nginx
+  host: lighthouse.example.com
+  tls: true
+  tlsSecretName: lighthouse-tls
+
+# --- OpenCost ---
+opencost:
+  enabled: false
+  opencost:
+    prometheus:
+      internal:
+        enabled: false
+        serviceName: prometheus-server
+        namespaceName: prometheus-system
+        port: 80
+        scheme: http
+    ui:
+      enabled: true

@@ -1,0 +1,13 @@
+Lighthouse Stack — 生产级 Umbrella [Ref: 03_Phase4/08_一键部署工作流_设计]
+================================================================
+
+已安装/将安装组件（随 values）：
+  - Bitnami PostgreSQL（子 Chart）
+  - Bitnami Redis（可选）
+  - Lighthouse backend / frontend
+  - 可选 OpenCost
+
+Init SQL：ConfigMap **{{ .Release.Name }}-init-sql** 须与 `postgresql.primary.initdb.scriptsConfigMap` 一致（**deploy.sh** 已 --set-string）。
+
+常用：
+  kubectl get pod,svc -n {{ .Release.Namespace }} -l app.kubernetes.io/instance={{ .Release.Name }}

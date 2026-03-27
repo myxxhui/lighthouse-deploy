@@ -1,0 +1,15 @@
+dependencies:
+- name: postgresql
+  repository: https://charts.bitnami.com/bitnami
+  version: 18.5.14
+- name: redis
+  repository: https://charts.bitnami.com/bitnami
+  version: 25.3.9
+- name: clickhouse
+  repository: https://charts.bitnami.com/bitnami
+  version: 9.4.4
+- name: opencost
+  repository: https://opencost.github.io/opencost-helm-chart
+  version: 2.5.12
+digest: sha256:cfeee13f2b23191a06d9ec9087b24828cc5f8742894db9dfa71e4efb896e389c
+generated: "2026-03-27T15:19:52.269006021+08:00"

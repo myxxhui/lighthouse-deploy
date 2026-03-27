@@ -254,10 +254,7 @@ CREATE TABLE IF NOT EXISTS finops_sync_job (
     created_at       TIMESTAMP NOT NULL DEFAULT NOW(),
     started_at       TIMESTAMP,
     completed_at     TIMESTAMP,
-    data_version     BIGINT NOT NULL DEFAULT 0,
-    progress_current INTEGER NOT NULL DEFAULT 0,
-    progress_total   INTEGER NOT NULL DEFAULT 0,
-    phase_detail     VARCHAR(256) NOT NULL DEFAULT ''
+    data_version     BIGINT NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_finops_sync_job_status ON finops_sync_job(status);
 CREATE INDEX IF NOT EXISTS idx_finops_sync_job_created ON finops_sync_job(created_at DESC);
